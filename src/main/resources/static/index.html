@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>NexStore — Item Manager</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="in.css"/>
+    <style>
+        .auth-staff, .auth-admin {
+            display: none !important; /* Hidden by default, shown by App.js if permitted */
+        }
+    </style>
+</head>
+<body>
+
+<!-- ── HEADER ── -->
+<header class="site-header">
+    <div class="header-bg"></div>
+    <div class="header-content">
+        <div class="logo">
+            <span class="logo-icon">⬡</span>
+            <span class="logo-text">NexStore</span>
+        </div>
+        <p class="header-sub">E-Commerce Management Console</p>
+        <div class="header-stats">
+            <div class="user-info" style="margin-right: 1rem; color: var(--text-muted); font-size: 0.9rem;">
+                Hi, <span id="user-display-name" style="color: var(--text); font-weight: 600;">Guest</span> 
+                (<span id="user-display-role" style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em;">Role</span>)
+            </div>
+            <button class="action-btn" onclick="logout()" style="padding: 0.4rem 0.8rem; font-size: 0.8rem; background: rgba(255,255,255,0.05);">Logout</button>
+            <div class="stat-pill" id="stat-items">— items</div>
+            <div class="stat-pill" id="stat-orders">— orders</div>
+            <div class="stat-pill online">● Live</div>
+        </div>
+    </div>
+</header>
+
+<!-- ── NAV TABS ── -->
+<nav class="tab-nav">
+    <button class="tab-btn active" data-panel="view"   onclick="switchTab(this,'view')">   Inventory    </button>
+    <button class="tab-btn auth-staff" data-panel="add"    onclick="switchTab(this,'add')">    Add Item     </button>
+    <button class="tab-btn auth-staff" data-panel="update" onclick="switchTab(this,'update')"> Update Item  </button>
+    <button class="tab-btn orders-tab" data-panel="orders" onclick="switchTab(this,'orders')"> Orders  </button>
+    <button class="tab-btn auth-admin" data-panel="users"  onclick="switchTab(this,'users')">  Users   </button>
+</nav>
+
+<!-- ── OVERLAY for unauthenticated ── -->
+<div id="auth-overlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:var(--bg); z-index:9999; justify-content:center; align-items:center; flex-direction:column; text-align:center;">
+    <div class="logo" style="margin-bottom: 2rem;">
+        <span class="logo-icon" style="font-size: 4rem; color: var(--blue);">⬡</span>
+        <h1 class="logo-text" style="font-size: 3rem;">NexStore</h1>
+    </div>
+    <p style="color: var(--text-muted); margin-bottom: 2rem;">Authenticating session...</p>
+    <div class="loader" style="width: 40px; height: 40px; border: 4px solid rgba(255,255,255,0.1); border-top-color: var(--blue); border-radius: 50%; animation: spin 1s linear infinite;"></div>
+</div>
+<style>
+    @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+
+<main class="main-content">
+
+    <!-- ── PANEL: VIEW ── -->
+    <section id="panel-view" class="panel active">
+        <div class="panel-header">
+            <div>
+                <h2>Inventory</h2>
+                <p class="panel-desc">All products currently in stock</p>
+            </div>
+            <button class="action-btn primary" onclick="loadAllItems()">↻ Refresh</button>
+        </div>
+        <div class="table-wrapper">
+            <table>
+                <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Product</th>
+                    <th>Description</th>
+                    <th>Price</th>
+                    <th>Stock</th>
+                    <th>Action</th>
+                </tr>
+                </thead>
+                <tbody id="items-tbody">
+                <tr><td colspan="6" class="empty-state">Click Refresh to load inventory</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <div id="msg-view" class="message"></div>
+    </section>
+
+    <!-- ── PANEL: ADD ── -->
+    <section id="panel-add" class="panel">
+        <div class="panel-header">
+            <div>
+                <h2>Add Product</h2>
+                <p class="panel-desc">Register a new item to inventory</p>
+            </div>
+        </div>
+        <div class="form-grid">
+            <div class="form-group">
+                <label for="add-id">Item ID</label>
+                <input type="number" id="add-id" placeholder="e.g. 5"/>
+            </div>
+            <div class="form-group">
+                <label for="add-name">Product Name</label>
+                <input type="text" id="add-name" placeholder="e.g. Tablet"/>
+            </div>
+            <div class="form-group full">
+                <label for="add-desc">Description</label>
+                <input type="text" id="add-desc" placeholder="e.g. 10-inch display tablet"/>
+            </div>
+            <div class="form-group">
+                <label for="add-price">Price ($)</label>
+                <input type="number" id="add-price" placeholder="e.g. 499.99" step="0.01"/>
+            </div>
+            <div class="form-group">
+                <label for="add-stock">Stock Quantity</label>
+                <input type="number" id="add-stock" placeholder="e.g. 25"/>
+            </div>
+        </div>
+        <button class="action-btn success" onclick="addItem()">+ Add to Inventory</button>
+        <div id="msg-add" class="message"></div>
+    </section>
+
+    <!-- ── PANEL: UPDATE ── -->
+    <section id="panel-update" class="panel">
+        <div class="panel-header">
+            <div>
+                <h2>Update Product</h2>
+                <p class="panel-desc">Modify an existing item's details</p>
+            </div>
+        </div>
+        <div class="form-grid">
+            <div class="form-group full">
+                <label for="upd-id">Item ID to Update</label>
+                <input type="number" id="upd-id" placeholder="e.g. 1"/>
+            </div>
+            <div class="form-group">
+                <label for="upd-name">New Name</label>
+                <input type="text" id="upd-name" placeholder="e.g. Laptop Pro"/>
+            </div>
+            <div class="form-group">
+                <label for="upd-price">New Price ($)</label>
+                <input type="number" id="upd-price" placeholder="e.g. 899.99" step="0.01"/>
+            </div>
+            <div class="form-group full">
+                <label for="upd-desc">New Description</label>
+                <input type="text" id="upd-desc" placeholder="e.g. Updated high performance laptop"/>
+            </div>
+            <div class="form-group">
+                <label for="upd-stock">New Stock Quantity</label>
+                <input type="number" id="upd-stock" placeholder="e.g. 5"/>
+            </div>
+        </div>
+        <button class="action-btn warning" onclick="updateItem()">✎ Save Changes</button>
+        <div id="msg-update" class="message"></div>
+    </section>
+
+    <!-- ── PANEL: ORDERS ── -->
+    <section id="panel-orders" class="panel">
+        <div class="panel-header">
+            <div>
+                <h2>Orders</h2>
+                <p class="panel-desc">Manage and track customer orders</p>
+            </div>
+            <button class="action-btn primary" onclick="loadAllOrders()">↻ Refresh</button>
+        </div>
+
+        <div class="table-wrapper">
+            <table>
+                <thead>
+                <tr>
+                    <th>Order ID</th>
+                    <th>Customer ID</th>
+                    <th>Date</th>
+                    <th>Total</th>
+                    <th>Actions</th>
+                </tr>
+                </thead>
+                <tbody id="orders-tbody">
+                <tr><td colspan="5" class="empty-state">Click Refresh to load orders</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <div id="msg-orders" class="message"></div>
+
+        <!-- Order Detail -->
+        <div class="section-divider"></div>
+        <div class="panel-header">
+            <div>
+                <h2>Order Details</h2>
+                <p class="panel-desc">Eager load — fetches full customer + item breakdown</p>
+            </div>
+        </div>
+        <div class="form-grid">
+            <div class="form-group">
+                <label for="order-detail-id">Order ID</label>
+                <input type="number" id="order-detail-id" placeholder="e.g. 1"/>
+            </div>
+        </div>
+        <button class="action-btn primary" onclick="loadOrderDetail()">⌕ Load Full Details</button>
+        <div id="order-detail-box" style="margin-top:1.25rem;"></div>
+
+        <!-- Place Order -->
+        <div class="section-divider"></div>
+        <div class="panel-header">
+            <div>
+                <h2>Place New Order</h2>
+                <p class="panel-desc">Create an order and assign items to it</p>
+            </div>
+        </div>
+        <div class="form-grid">
+            <div class="form-group">
+                <label for="new-order-customer">Customer ID</label>
+                <input type="number" id="new-order-customer" placeholder="e.g. 1"/>
+            </div>
+            <div class="form-group">
+                <label for="new-order-item">Item ID</label>
+                <input type="number" id="new-order-item" placeholder="e.g. 1"/>
+            </div>
+            <div class="form-group">
+                <label for="new-order-qty">Quantity</label>
+                <input type="number" id="new-order-qty" placeholder="e.g. 2"/>
+            </div>
+        </div>
+        <button class="action-btn success" onclick="placeOrder()">+ Place Order</button>
+        <div id="msg-place-order" class="message"></div>
+
+        <!-- Delete Order -->
+        <div class="section-divider"></div>
+        <div class="panel-header">
+            <div>
+                <h2>Delete Order</h2>
+                <p class="panel-desc">Permanently remove an order and its items</p>
+            </div>
+        </div>
+        <div class="form-grid">
+            <div class="form-group">
+                <label for="delete-order-id">Order ID</label>
+                <input type="number" id="delete-order-id" placeholder="e.g. 1"/>
+            </div>
+        </div>
+        <button class="action-btn danger auth-admin" onclick="deleteOrder()" style="margin-top: 1rem;">✕ Delete Order</button>
+        <div id="msg-delete-order" class="message"></div>
+    </section>
+
+    <!-- ── PANEL: USERS (RBAC) ── -->
+    <section id="panel-users" class="panel">
+        <div class="panel-header">
+            <div>
+                <h2>User Management</h2>
+                <p class="panel-desc">Promote users to different roles (Admin/Staff)</p>
+            </div>
+        </div>
+        <div class="form-grid">
+            <div class="form-group">
+                <label for="promote-username">Username</label>
+                <input type="text" id="promote-username" placeholder="e.g. jdoe"/>
+            </div>
+            <div class="form-group">
+                <label for="promote-role">New Role</label>
+                <select id="promote-role" style="background: var(--bg-card); color: var(--text); border: 1px solid var(--border); padding: 0.6rem; border-radius: 6px;">
+                    <option value="CUSTOMER">CUSTOMER</option>
+                    <option value="STAFF">STAFF</option>
+                    <option value="ADMIN">ADMIN</option>
+                    <option value="SUPER_ADMIN">SUPER ADMIN</option>
+                </select>
+            </div>
+        </div>
+        <button class="action-btn primary" onclick="promoteUser()" style="margin-top: 1rem;">Promote User</button>
+        <div id="msg-users" class="message"></div>
+    </section>
+
+</main>
+
+<script src="App.js"></script>
+<script>
+    // Debug helper to check if App.js loaded
+    window.addEventListener('load', () => {
+        if (typeof switchTab === 'undefined') {
+            console.error('App.js failed to load or define switchTab');
+        } else {
+            console.log('App.js loaded successfully');
+        }
+    });
+</script>
+</body>
+</html>
