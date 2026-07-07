@@ -178,7 +178,6 @@ public class OrderRepositoryImpl implements OrderRepository {
         return generatedId;
     }
 
-    // ─── ADD ORDER ITEM (WRITE to master + sync to replica) ───────
     @Override
     public void addOrderItem(Integer order_id, Integer item_id, Integer quantity) {
         String getItem    = "SELECT price, stock_quantity FROM item WHERE item_id = ?";
@@ -194,9 +193,6 @@ public class OrderRepositoryImpl implements OrderRepository {
                 int availableStock = rs.getInt("stock_quantity");
                 double price       = rs.getDouble("price");
 
-                System.out.println("Item " + item_id + " stock: " + availableStock + ", requested: " + quantity);
-
-                // Stock validation
                 if (quantity > availableStock) {
                     throw new RuntimeException(
                             "Insufficient stock for item " + item_id +
@@ -204,58 +200,56 @@ public class OrderRepositoryImpl implements OrderRepository {
                     );
                 }
 
-                // 1. Insert into MASTER order_item
+                // 1. Insert into MASTER order_item (fires master's stock-reduction trigger)
                 try (PreparedStatement insertPs = conn.prepareStatement(insertItem)) {
-                    insertPs.setInt(1,    order_id);
-                    insertPs.setInt(2,    item_id);
-                    insertPs.setInt(3,    quantity);
+                    insertPs.setInt(1, order_id);
+                    insertPs.setInt(2, item_id);
+                    insertPs.setInt(3, quantity);
                     insertPs.setDouble(4, price);
                     insertPs.executeUpdate();
-                    System.out.println(" order_item inserted into master");
+                    System.out.println("order_item inserted into master");
                 }
 
-                // 2. Sync order_item to REPLICA
-                try (Connection replicaConn = DBConnection.getReplicaConnection();
-                     PreparedStatement replicaPs = replicaConn.prepareStatement(insertItem)) {
+                // 2. Sync order_item to REPLICA + manually reduce replica stock (no trigger there)
+                //    + recompute order total on replica — wrapped with deadlock retry
+                final double finalPrice = price;
+                DBConnection.executeWithRetry(() -> {
+                    try (Connection replicaConn = DBConnection.getReplicaConnection()) {
 
-                    replicaPs.setInt(1,    order_id);
-                    replicaPs.setInt(2,    item_id);
-                    replicaPs.setInt(3,    quantity);
-                    replicaPs.setDouble(4, price);
-                    replicaPs.executeUpdate();
-                    System.out.println("order_item synced to replica");
-                }
+                        try (PreparedStatement replicaPs = replicaConn.prepareStatement(insertItem)) {
+                            replicaPs.setInt(1, order_id);
+                            replicaPs.setInt(2, item_id);
+                            replicaPs.setInt(3, quantity);
+                            replicaPs.setDouble(4, finalPrice);
+                            replicaPs.executeUpdate();
+                        }
 
-                // 3. Sync stock reduction to REPLICA
-                // (trigger handles master automatically, we manually sync replica)
-                String syncStock = "UPDATE item SET stock_quantity = stock_quantity - ? WHERE item_id = ?";
-                try (Connection replicaConn = DBConnection.getReplicaConnection();
-                     PreparedStatement syncPs = replicaConn.prepareStatement(syncStock)) {
+                        String syncStock = "UPDATE item SET stock_quantity = stock_quantity - ? WHERE item_id = ?";
+                        try (PreparedStatement syncPs = replicaConn.prepareStatement(syncStock)) {
+                            syncPs.setInt(1, quantity);
+                            syncPs.setInt(2, item_id);
+                            syncPs.executeUpdate();
+                        }
 
-                    syncPs.setInt(1, quantity);
-                    syncPs.setInt(2, item_id);
-                    syncPs.executeUpdate();
-                    System.out.println(" Stock synced to replica for item: " + item_id);
-                }
+                        String syncTotal = """
+                        UPDATE orders SET total_amount = (
+                            SELECT ISNULL(SUM(quantity * unit_price), 0)
+                            FROM order_item WHERE order_id = ?
+                        ) WHERE order_id = ?
+                        """;
+                        try (PreparedStatement totalPs = replicaConn.prepareStatement(syncTotal)) {
+                            totalPs.setInt(1, order_id);
+                            totalPs.setInt(2, order_id);
+                            totalPs.executeUpdate();
+                        }
 
-                // 4. Sync total_amount update to REPLICA
-                // (trigger handles master, we manually update replica)
-                String syncTotal = """
-                    UPDATE orders SET total_amount = (
-                        SELECT ISNULL(SUM(quantity * unit_price), 0)
-                        FROM order_item WHERE order_id = ?
-                    ) WHERE order_id = ?
-                    """;
-                try (Connection replicaConn = DBConnection.getReplicaConnection();
-                     PreparedStatement totalPs = replicaConn.prepareStatement(syncTotal)) {
+                        System.out.println("order_item, stock, and total synced to replica");
 
-                    totalPs.setInt(1, order_id);
-                    totalPs.setInt(2, order_id);
-                    totalPs.executeUpdate();
-                    System.out.println(" Order total synced to replica for order: " + order_id);
-                }
+                    } catch (SQLException e) {
+                        throw new RuntimeException(e);
+                    }
+                }, 3);
 
-                // 5. Evict all related caches
                 cacheService.evict("orders:all");
                 cacheService.evict("orders:" + order_id);
                 cacheService.evict("items:all");
@@ -288,7 +282,7 @@ public class OrderRepositoryImpl implements OrderRepository {
             PreparedStatement ps2 = conn.prepareStatement(deleteOrder);
             ps2.setInt(1, id);
             ps2.executeUpdate();
-            System.out.println("🗑️ Order #" + id + " deleted from master");
+            System.out.println(" Order #" + id + " deleted from master");
 
         } catch (SQLException e) {
             e.printStackTrace();
@@ -304,10 +298,10 @@ public class OrderRepositoryImpl implements OrderRepository {
             PreparedStatement ps2 = replicaConn.prepareStatement(deleteOrder);
             ps2.setInt(1, id);
             ps2.executeUpdate();
-            System.out.println("🔄 Order #" + id + " delete synced to replica");
+            System.out.println(" Order #" + id + " delete synced to replica");
 
         } catch (SQLException e) {
-            System.out.println("⚠️ Failed to sync order delete to replica: " + e.getMessage());
+            System.out.println(" Failed to sync order delete to replica: " + e.getMessage());
             e.printStackTrace();
         }
 
@@ -315,63 +309,4 @@ public class OrderRepositoryImpl implements OrderRepository {
         cacheService.evict("orders:" + id);
     }
 
-//    // ─── FIND CUSTOMER ID BY USERNAME ─────────────────────────────
-//    @Override
-//    public Integer findCustomerIdByUsername(String username) {
-//        String sql = "SELECT customerid FROM users WHERE username = ?";
-//        try (Connection conn = DBConnection.getConnection();
-//             PreparedStatement ps = conn.prepareStatement(sql)) {
-//
-//            ps.setString(1, username);
-//            ResultSet rs = ps.executeQuery();
-//            if (rs.next()) return rs.getInt("customerid");
-//
-//        } catch (SQLException e) {
-//            e.printStackTrace();
-//        }
-//        return null;
-//    }
-//
-//    // ─── FIND CUSTOMER ID BY ORDER ID ─────────────────────────────
-//    @Override
-//    public Integer findCustomerIdByOrderId(Integer orderId) {
-//        String sql = "SELECT customer_id FROM orders WHERE order_id = ?";
-//        try (Connection conn = DBConnection.getConnection();
-//             PreparedStatement ps = conn.prepareStatement(sql)) {
-//
-//            ps.setInt(1, orderId);
-//            ResultSet rs = ps.executeQuery();
-//            if (rs.next()) return rs.getInt("customer_id");
-//
-//        } catch (SQLException e) {
-//            e.printStackTrace();
-//        }
-//        return null;
-//    }
-//
-//    // ─── FIND ORDERS BY CUSTOMER ID ───────────────────────────────
-//    @Override
-//    public List<Order> findByCustomerId(Integer customerId) {
-//        List<Order> orders = new ArrayList<>();
-//        String sql = "SELECT * FROM orders WHERE customer_id = ?";
-//
-//        try (Connection conn = DBConnection.getReplicaConnection();
-//             PreparedStatement ps = conn.prepareStatement(sql)) {
-//
-//            ps.setInt(1, customerId);
-//            ResultSet rs = ps.executeQuery();
-//
-//            while (rs.next()) {
-//                orders.add(new Order(
-//                        rs.getInt("order_id"),
-//                        rs.getInt("customer_id"),
-//                        rs.getString("order_date"),
-//                        rs.getDouble("total_amount")
-//                ));
-//            }
-//        } catch (SQLException e) {
-//            e.printStackTrace();
-//        }
-//        return orders;
-//    }
 }

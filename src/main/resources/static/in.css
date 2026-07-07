@@ -456,3 +456,189 @@ input:focus {
     .main-content { padding: 0 1rem; }
     .logo-text { font-size: 1.8rem; }
 }
+
+.sort-btn{
+    background: rgba(255,255,255,0.08);
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    transition: all 0.15s;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.4rem;
+    height: 1.4rem;
+    padding: 0;
+    line-height: 1;
+    margin-left: 0;
+}
+
+.sort-btn:hover{
+    background: var(--blue);
+    color: #fff;
+}
+
+.sort-btn.active{
+    background: var(--blue);
+    color: #fff;
+}
+
+.th-flex {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    white-space: nowrap;
+}
+
+.sort-group {
+    display: flex;
+    gap: 0.2rem;
+    flex-shrink: 0;
+}
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+
+    min-width: 90px;
+    padding: 10px 18px;
+
+    background: rgba(255,255,255,0.08);
+    color: var(--text);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 8px;
+
+    font-size: 0.9rem;
+    font-weight: 500;
+
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn:hover {
+    background: var(--blue);
+    border-color: var(--blue);
+    color: white;
+    transform: translateY(-2px);
+}
+
+.btn:active {
+    transform: translateY(0);
+}
+
+.btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.pagination {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 12px;
+    margin-top: 20px;
+}
+
+#page-info {
+    min-width: 130px;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    font-weight: 500;
+}
+
+/* ── VIDEO / CCTV STATUS BADGES ── */
+.status-badge {
+    display: inline-block;
+    padding: 0.2rem 0.6rem;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+.status-pending    { background: rgba(245,158,11,0.15);  color: var(--amber); }
+.status-processing { background: rgba(79,142,247,0.15);  color: var(--blue); }
+.status-completed  { background: rgba(16,185,129,0.15);  color: var(--emerald); }
+.status-failed     { background: rgba(244,63,94,0.15);   color: var(--rose); }
+
+/* ── VIDEO GRID ── */
+.video-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 1rem;
+}
+.video-card {
+    background: var(--navy-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    animation: fadeUp 0.3s ease;
+}
+.video-card h4 { font-family: 'Syne', sans-serif; font-size: 0.95rem; color: #fff; }
+.video-card .video-meta { font-size: 0.78rem; color: var(--text-muted); }
+.video-card .video-qualities { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+
+.quality-btn {
+    padding: 0.3rem 0.7rem;
+    border: 1px solid rgba(79,142,247,0.3);
+    border-radius: 6px;
+    background: rgba(79,142,247,0.08);
+    color: var(--blue);
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+.quality-btn:hover  { background: var(--blue); color: #fff; }
+.quality-btn.active { background: var(--blue); color: #fff; }
+
+/* ── VIDEO MODAL ── */
+.video-modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.75);
+    z-index: 10000;
+    justify-content: center;
+    align-items: center;
+}
+.video-modal-overlay.open { display: flex; }
+
+.video-modal {
+    background: var(--navy-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.25rem;
+    width: min(720px, 92vw);
+}
+.video-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.75rem;
+}
+.video-modal-header h3 { font-family:'Syne', sans-serif; color:#fff; font-size:1.05rem; }
+.video-modal-close {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    font-size: 1.1rem;
+    cursor: pointer;
+}
+.video-modal-close:hover { color: var(--rose); }
+
+#video-modal-player {
+    width: 100%;
+    border-radius: var(--radius-sm);
+    background: #000;
+    max-height: 60vh;
+}
+.quality-switch { display: flex; gap: 0.5rem; margin-top: 0.75rem; }

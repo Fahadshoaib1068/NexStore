@@ -66,6 +66,8 @@ public class SecurityConfig {
                         .requestMatchers("/", "/index.html", "/in.css", "/App.js",
                                 "/login.html", "/login.css", "/login.js").permitAll()
 
+                        .requestMatchers(HttpMethod.GET, "/items/search/**").hasAnyRole("CUSTOMER", "STAFF", "ADMIN", "SUPER_ADMIN")
+
                         // ── ITEMS ──
                         .requestMatchers(HttpMethod.GET,    "/items/**").hasAnyRole("CUSTOMER", "STAFF", "ADMIN", "SUPER_ADMIN")
                         .requestMatchers(HttpMethod.POST,   "/items/**").hasAnyRole("STAFF", "ADMIN", "SUPER_ADMIN")
@@ -79,7 +81,9 @@ public class SecurityConfig {
 
                         // ── USERS (admin only) ──
                         .requestMatchers("/users/**").hasAnyRole("ADMIN", "SUPER_ADMIN")
-
+                        // ── VIDEOS ──
+                        .requestMatchers("/videos/stream/**").hasAnyRole("CUSTOMER", "STAFF", "ADMIN", "SUPER_ADMIN")
+                        .requestMatchers("/videos/**").hasRole("SUPER_ADMIN")
                         // ── anything else needs login ──
                         .anyRequest().authenticated()
                 )

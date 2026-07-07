@@ -50,4 +50,28 @@ public class RabbitMQConfig {
         template.setMessageConverter(jsonMessageConverter());
         return template;
     }
+
+    // ─── VIDEO PROCESSING QUEUE ─────────────────────────────────────
+    public static final String VIDEO_QUEUE    = "video.processing.queue";
+    public static final String VIDEO_EXCHANGE = "video.processing.exchange";
+    public static final String VIDEO_KEY      = "video.process";
+
+    @Bean
+    public Queue videoProcessingQueue() {
+        return new Queue(VIDEO_QUEUE, true);
+    }
+
+    @Bean
+    public TopicExchange videoProcessingExchange() {
+        return new TopicExchange(VIDEO_EXCHANGE);
+    }
+
+    @Bean
+    public Binding videoProcessingBinding() {
+        return BindingBuilder
+                .bind(videoProcessingQueue())
+                .to(videoProcessingExchange())
+                .with(VIDEO_KEY);
+    }
+
 }

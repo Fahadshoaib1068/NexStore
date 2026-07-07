@@ -73,4 +73,20 @@ public class CRUDOperationItem {
                 "Item deletion request received. Processing via RabbitMQ..."
         );
     }
+
+    @GetMapping("/search")
+    public ResponseEntity<List<Item>> searchItems(
+            @RequestParam(required = false) String name,
+            @RequestParam(required = false) Double minPrice,
+            @RequestParam(required = false) Double maxPrice,
+            @RequestParam(required = false) Integer minStock,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "5") int size,
+            @RequestParam(defaultValue = "item_id") String sortBy,
+            @RequestParam(defaultValue = "asc") String direction)
+    {
+        return ResponseEntity.ok(
+                itemRepository.search(name, minPrice, maxPrice, minStock, page, size,sortBy, direction)
+        );
+    }
 }

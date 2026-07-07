@@ -32,7 +32,8 @@ public class RateLimitFilter extends OncePerRequestFilter {
 
         // Only rate limit GET /items
         boolean isTargetEndpoint = request.getMethod().equals("GET")
-                && request.getRequestURI().equals("/items");
+                && (request.getRequestURI().equals("/items")
+                || request.getRequestURI().equals("/items/search"));
 
         if (isTargetEndpoint) {
             Authentication auth = SecurityContextHolder.getContext().getAuthentication();

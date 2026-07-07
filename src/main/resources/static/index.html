@@ -8,9 +8,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="in.css"/>
     <style>
-        .auth-staff, .auth-admin {
-            display: none !important; /* Hidden by default, shown by App.js if permitted */
-        }
+        .auth-staff, .auth-admin, .auth-superadmin { display: none !important; }
+        @keyframes spin { to { transform: rotate(360deg); } }
     </style>
 </head>
 <body>
@@ -25,11 +24,11 @@
         </div>
         <p class="header-sub">E-Commerce Management Console</p>
         <div class="header-stats">
-            <div class="user-info" style="margin-right: 1rem; color: var(--text-muted); font-size: 0.9rem;">
-                Hi, <span id="user-display-name" style="color: var(--text); font-weight: 600;">Guest</span> 
-                (<span id="user-display-role" style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em;">Role</span>)
+            <div class="user-info" style="margin-right:1rem;color:var(--text-muted);font-size:0.9rem;">
+                Hi, <span id="user-display-name" style="color:var(--text);font-weight:600;">Guest</span>
+                (<span id="user-display-role" style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.05em;">Role</span>)
             </div>
-            <button class="action-btn" onclick="logout()" style="padding: 0.4rem 0.8rem; font-size: 0.8rem; background: rgba(255,255,255,0.05);">Logout</button>
+            <button class="action-btn" onclick="logout()" style="padding:0.4rem 0.8rem;font-size:0.8rem;background:rgba(255,255,255,0.05);">Logout</button>
             <div class="stat-pill" id="stat-items">— items</div>
             <div class="stat-pill" id="stat-orders">— orders</div>
             <div class="stat-pill online">● Live</div>
@@ -39,46 +38,99 @@
 
 <!-- ── NAV TABS ── -->
 <nav class="tab-nav">
-    <button class="tab-btn active" data-panel="view"   onclick="switchTab(this,'view')">   Inventory    </button>
-    <button class="tab-btn auth-staff" data-panel="add"    onclick="switchTab(this,'add')">    Add Item     </button>
-    <button class="tab-btn auth-staff" data-panel="update" onclick="switchTab(this,'update')"> Update Item  </button>
-    <button class="tab-btn orders-tab" data-panel="orders" onclick="switchTab(this,'orders')"> Orders  </button>
-    <button class="tab-btn auth-admin" data-panel="users"  onclick="switchTab(this,'users')">  Users   </button>
+    <button class="tab-btn active"     data-panel="view"   onclick="switchTab(this,'view')">   Inventory   </button>
+    <button class="tab-btn auth-staff" data-panel="add"    onclick="switchTab(this,'add')">    Add Item    </button>
+    <button class="tab-btn auth-staff" data-panel="update" onclick="switchTab(this,'update')"> Update Item </button>
+    <button class="tab-btn orders-tab" data-panel="orders" onclick="switchTab(this,'orders')"> Orders     </button>
+    <button class="tab-btn auth-admin" data-panel="users"  onclick="switchTab(this,'users')">  Users      </button>
+    <button class="tab-btn auth-superadmin" data-panel="videos" onclick="switchTab(this,'videos')"> CCTV </button>
 </nav>
 
-<!-- ── OVERLAY for unauthenticated ── -->
-<div id="auth-overlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:var(--bg); z-index:9999; justify-content:center; align-items:center; flex-direction:column; text-align:center;">
-    <div class="logo" style="margin-bottom: 2rem;">
-        <span class="logo-icon" style="font-size: 4rem; color: var(--blue);">⬡</span>
-        <h1 class="logo-text" style="font-size: 3rem;">NexStore</h1>
-    </div>
-    <p style="color: var(--text-muted); margin-bottom: 2rem;">Authenticating session...</p>
-    <div class="loader" style="width: 40px; height: 40px; border: 4px solid rgba(255,255,255,0.1); border-top-color: var(--blue); border-radius: 50%; animation: spin 1s linear infinite;"></div>
+<!-- ── AUTH OVERLAY ── -->
+<div id="auth-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:var(--navy);z-index:9999;justify-content:center;align-items:center;flex-direction:column;text-align:center;">
+    <span class="logo-icon" style="font-size:4rem;color:var(--blue);">⬡</span>
+    <h1 class="logo-text" style="font-size:3rem;">NexStore</h1>
+    <p style="color:var(--text-muted);margin:1rem 0 2rem;">Authenticating session...</p>
+    <div style="width:40px;height:40px;border:4px solid rgba(255,255,255,0.1);border-top-color:var(--blue);border-radius:50%;animation:spin 1s linear infinite;"></div>
 </div>
-<style>
-    @keyframes spin { to { transform: rotate(360deg); } }
-</style>
 
 <main class="main-content">
 
-    <!-- ── PANEL: VIEW ── -->
+    <!-- ── PANEL: VIEW (INVENTORY) ── -->
     <section id="panel-view" class="panel active">
         <div class="panel-header">
             <div>
                 <h2>Inventory</h2>
                 <p class="panel-desc">All products currently in stock</p>
             </div>
-            <button class="action-btn primary" onclick="loadAllItems()">↻ Refresh</button>
         </div>
+
+        <!-- Search & Filter Bar -->
+        <div class="form-grid" style="margin-bottom:1rem;">
+            <div class="form-group">
+                <label>Search by Name</label>
+                <input type="text" id="search-name" placeholder="e.g. Laptop"/>
+            </div>
+            <div class="form-group">
+                <label>Min Price ($)</label>
+                <input type="number" id="search-min-price" placeholder="e.g. 100"/>
+            </div>
+            <div class="form-group">
+                <label>Max Price ($)</label>
+                <input type="number" id="search-max-price" placeholder="e.g. 1000"/>
+            </div>
+            <div class="form-group">
+                <label>Min Stock</label>
+                <input type="number" id="search-min-stock" placeholder="e.g. 5"/>
+            </div>
+        </div>
+
+        <!-- Buttons + Pagination -->
+        <div style="display:flex;gap:0.75rem;margin-bottom:1rem;align-items:center;flex-wrap:wrap;">
+            <button class="action-btn primary" onclick="loadAllItems()">↻ Refresh</button>
+            <button class="action-btn success" onclick="applyFilter()">⌕ Search</button>
+            <button class="action-btn" style="background:var(--text-muted);" onclick="clearSearch()">✕ Clear</button>
+            <div id="page-info" style="color:var(--text-muted);font-size:0.85rem;margin-left:auto;"></div>
+            <div class="pagination">
+            <button id="btn-prev" onclick="prevPage()" class="btn">← Prev </button>
+            <button id="btn-next" onclick="nextPage()" class="btn">Next →</button>
+            </div>
+        </div>
+
+        <!-- Items Table -->
         <div class="table-wrapper">
             <table>
                 <thead>
                 <tr>
                     <th>ID</th>
-                    <th>Product</th>
+                    <th>
+                        <div class="th-flex">
+                            <span>Product</span>
+                            <span class="sort-group">
+                                <button onclick="sortTable('name', 'asc')" class="sort-btn">↑</button>
+                                <button onclick="sortTable('name', 'desc')" class="sort-btn">↓</button>
+                        </span>
+                        </div>
+                    </th>
                     <th>Description</th>
-                    <th>Price</th>
-                    <th>Stock</th>
+                    <th>
+                        <div class="th-flex">
+                            <span>Price</span>
+                            <span class="sort-group">
+                                <button onclick="sortTable('price', 'asc')" class="sort-btn">↑</button>
+                                <button onclick="sortTable('price', 'desc')" class="sort-btn">↓</button>
+                             </span>
+                        </div>
+                    </th>
+                    <th>
+                        <div class="th-flex">
+                            <span>Stock</span>
+                            <span class="sort-group">
+                                    <button onclick="sortTable('stock', 'asc')" class="sort-btn">↑</button>
+                                    <button onclick="sortTable('stock', 'desc')" class="sort-btn">↓</button>
+                             </span>
+                        </div>
+                    </th>
                     <th>Action</th>
                 </tr>
                 </thead>
@@ -242,16 +294,16 @@
                 <input type="number" id="delete-order-id" placeholder="e.g. 1"/>
             </div>
         </div>
-        <button class="action-btn danger auth-admin" onclick="deleteOrder()" style="margin-top: 1rem;">✕ Delete Order</button>
+        <button class="action-btn danger auth-admin" onclick="deleteOrder()" style="margin-top:1rem;">✕ Delete Order</button>
         <div id="msg-delete-order" class="message"></div>
     </section>
 
-    <!-- ── PANEL: USERS (RBAC) ── -->
+    <!-- ── PANEL: USERS ── -->
     <section id="panel-users" class="panel">
         <div class="panel-header">
             <div>
                 <h2>User Management</h2>
-                <p class="panel-desc">Promote users to different roles (Admin/Staff)</p>
+                <p class="panel-desc">Promote users to different roles</p>
             </div>
         </div>
         <div class="form-grid">
@@ -261,7 +313,7 @@
             </div>
             <div class="form-group">
                 <label for="promote-role">New Role</label>
-                <select id="promote-role" style="background: var(--bg-card); color: var(--text); border: 1px solid var(--border); padding: 0.6rem; border-radius: 6px;">
+                <select id="promote-role" style="background:var(--navy-card);color:var(--text);border:1px solid var(--border);padding:0.6rem;border-radius:6px;">
                     <option value="CUSTOMER">CUSTOMER</option>
                     <option value="STAFF">STAFF</option>
                     <option value="ADMIN">ADMIN</option>
@@ -269,18 +321,83 @@
                 </select>
             </div>
         </div>
-        <button class="action-btn primary" onclick="promoteUser()" style="margin-top: 1rem;">Promote User</button>
+        <button class="action-btn primary" onclick="promoteUser()" style="margin-top:1rem;">Promote User</button>
         <div id="msg-users" class="message"></div>
+    </section>
+
+    <!-- ── PANEL: VIDEOS (CCTV) ── -->
+    <section id="panel-videos" class="panel">
+        <div class="panel-header">
+            <div>
+                <h2>CCTV Footage</h2>
+                <p class="panel-desc">Upload, process, and review recorded footage</p>
+            </div>
+            <button class="action-btn primary" onclick="loadAllVideos()">↻ Refresh</button>
+        </div>
+
+        <!-- Upload -->
+        <div class="form-grid">
+            <div class="form-group full">
+                <label for="video-file-input">Upload Recording (.mp4, .mov)</label>
+                <input type="file" id="video-file-input" accept=".mp4,.mov,video/mp4,video/quicktime"/>
+            </div>
+        </div>
+        <button class="action-btn success" onclick="uploadVideo()">⬆ Upload</button>
+        <div id="msg-video-upload" class="message"></div>
+
+        <!-- All Uploads -->
+        <div class="section-divider"></div>
+        <div class="panel-header">
+            <div>
+                <h2>All Recordings</h2>
+                <p class="panel-desc">Every uploaded file and its processing status</p>
+            </div>
+        </div>
+        <div class="table-wrapper">
+            <table>
+                <thead>
+                <tr>
+                    <th>ID</th><th>File Name</th><th>Uploaded By</th><th>Uploaded At</th><th>Status</th><th>Action</th>
+                </tr>
+                </thead>
+                <tbody id="videos-tbody">
+                <tr><td colspan="6" class="empty-state">Click Refresh to load recordings</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <div id="msg-videos" class="message"></div>
+
+        <!-- Completed / Playable -->
+        <div class="section-divider"></div>
+        <div class="panel-header">
+            <div>
+                <h2>Processed Recordings</h2>
+                <p class="panel-desc">Completed footage, ready to play in 360p / 480p / 720p</p>
+            </div>
+        </div>
+        <div id="completed-videos-grid" class="video-grid">
+            <p class="empty-state">No completed recordings yet.</p>
+        </div>
     </section>
 
 </main>
 
+<!-- ── VIDEO PLAYER MODAL ── -->
+<div id="video-modal" class="video-modal-overlay">
+    <div class="video-modal">
+        <div class="video-modal-header">
+            <h3 id="video-modal-title">Recording</h3>
+            <button class="video-modal-close" onclick="closeVideoModal()">✕</button>
+        </div>
+        <video id="video-modal-player" controls></video>
+        <div class="quality-switch" id="quality-switch"></div>
+    </div>
+</div>
 <script src="App.js"></script>
 <script>
-    // Debug helper to check if App.js loaded
     window.addEventListener('load', () => {
         if (typeof switchTab === 'undefined') {
-            console.error('App.js failed to load or define switchTab');
+            console.error('App.js failed to load');
         } else {
             console.log('App.js loaded successfully');
         }
