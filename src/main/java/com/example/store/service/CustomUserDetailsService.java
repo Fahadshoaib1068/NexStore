@@ -28,17 +28,12 @@ public class CustomUserDetailsService implements UserDetailsService {
             throw new UsernameNotFoundException("User not found: " + username);
         }
 
-        // ADD THIS DEBUG LINE
-//        System.out.println("DEBUG - username: " + user.getUsername());
-//        System.out.println("DEBUG - passwordHash: " + user.getPassword_hash());
-//        System.out.println("DEBUG - roles: " + user.getRoles());
-
         List<SimpleGrantedAuthority> authorities = user.getRoles()
                 .stream()
                 .map(role -> new SimpleGrantedAuthority("ROLE_" + role))
                 .collect(Collectors.toList());
 
-        return new org.springframework.security.core.userdetails.User(   // user detail object for spring securityy
+        return new org.springframework.security.core.userdetails.User(   // user detail object for spring security
                 user.getUsername(),
                 user.getPassword_hash(),
                 authorities

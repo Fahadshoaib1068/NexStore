@@ -16,32 +16,53 @@ public class VideoRepository {
         String sql = "INSERT INTO video_upload (original_name, file_path, uploaded_by) VALUES (?, ?, ?)";
         Integer generatedId = null;
 
+        // 1. Write to MASTER
         try (Connection conn = DBConnection.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+
             ps.setString(1, originalName);
             ps.setString(2, filePath);
             ps.setString(3, uploadedBy);
             ps.executeUpdate();
+
             ResultSet keys = ps.getGeneratedKeys();
             if (keys.next()) generatedId = keys.getInt(1);
+            System.out.println("Video saved to master with id: " + generatedId);
+
         } catch (SQLException e) {
             e.printStackTrace();
             return null;
         }
 
+        // 2. Sync to REPLICA — key fix: use same connection for IDENTITY_INSERT
         if (generatedId != null) {
-            String replicaSql = "INSERT INTO video_upload (video_id, original_name, file_path, uploaded_by) VALUES (?, ?, ?, ?)";
-            try (Connection conn = DBConnection.getReplicaConnection();
-                 PreparedStatement ps = conn.prepareStatement(replicaSql)) {
-                ps.setInt(1, generatedId);
-                ps.setString(2, originalName);
-                ps.setString(3, filePath);
-                ps.setString(4, uploadedBy);
-                ps.executeUpdate();
+            try (Connection replicaConn = DBConnection.getReplicaConnection()) {
+
+                // Must use same connection for all 3 statements
+                replicaConn.createStatement()
+                        .execute("SET IDENTITY_INSERT video_upload ON");
+
+                try (PreparedStatement ps = replicaConn.prepareStatement(
+                        "INSERT INTO video_upload (video_id, original_name, file_path, uploaded_by) VALUES (?, ?, ?, ?)")) {
+
+                    ps.setInt(1,    generatedId);
+                    ps.setString(2, originalName);
+                    ps.setString(3, filePath);
+                    ps.setString(4, uploadedBy);
+                    ps.executeUpdate();
+                }
+
+                replicaConn.createStatement()
+                        .execute("SET IDENTITY_INSERT video_upload OFF");
+
+                System.out.println(" Video synced to replica with id: " + generatedId);
+
             } catch (SQLException e) {
+                System.out.println(" Failed to sync video to replica: " + e.getMessage());
                 e.printStackTrace();
             }
         }
+
         return generatedId;
     }
 
@@ -144,7 +165,8 @@ public class VideoRepository {
     private VideoUpload mapUpload(ResultSet rs) throws SQLException {
         return new VideoUpload(
                 rs.getInt("video_id"), rs.getString("original_name"), rs.getString("file_path"),
-                rs.getString("status"), rs.getString("uploaded_at"), rs.getString("uploaded_by")
+                rs.getString("status"), rs.getString("uploaded_at"), rs.getString("uploaded_by"),
+                rs.getString("thumbnail_path")
         );
     }
 
@@ -154,4 +176,17 @@ public class VideoRepository {
                 rs.getString("file_path"), rs.getString("processed_at")
         );
     }
+
+    public void updateThumbnail(Integer videoId, String thumbnailPath) {
+        try {
+            DBConnection.executeOnBoth(
+                    "UPDATE video_upload SET thumbnail_path = ? WHERE video_id = ?",
+                    ps -> { ps.setString(1, thumbnailPath); ps.setInt(2, videoId); }
+            );
+            System.out.println("Thumbnail updated for video #" + videoId);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
 }

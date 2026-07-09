@@ -39,13 +39,6 @@ public class AuthController {
         String username = body.get("username");
         String password = body.get("password");
 
-//        System.out.println("DEBUG - Attempting login for: " + username);
-//        System.out.println("DEBUG - Password entered: " + password);
-//        System.out.println("DEBUG - BCrypt test: " + passwordEncoder.matches(
-//                password,
-//                "$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lh23"
-//        ));
-
         try {
             Authentication auth = authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(username, password)

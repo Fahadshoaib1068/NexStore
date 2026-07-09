@@ -1,11 +1,9 @@
 package com.example.store.controller;
 
-import com.example.store.config.RabbitMQConfig;
 import com.example.store.model.VideoProcessed;
 import com.example.store.model.VideoUpload;
 import com.example.store.repository.VideoRepository;
 import com.example.store.service.VideoProcessingService;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
@@ -28,9 +26,8 @@ import java.util.UUID;
 @RequestMapping("/videos")
 public class VideoController {
 
-    private final VideoRepository videoRepository;
+    private final VideoRepository        videoRepository;
     private final VideoProcessingService videoProcessingService;
-    private final RabbitTemplate rabbitTemplate;
 
     @Value("${video.upload.path}")
     private String uploadPath;
@@ -38,19 +35,17 @@ public class VideoController {
     @Value("${video.processed.path}")
     private String processedPath;
 
+    @Value("${video.thumbnail.path}")
+    private String thumbnailPath;
+
     public VideoController(VideoRepository videoRepository,
-                           VideoProcessingService videoProcessingService,
-                           RabbitTemplate rabbitTemplate) {
+                           VideoProcessingService videoProcessingService) {
         this.videoRepository        = videoRepository;
         this.videoProcessingService = videoProcessingService;
-        this.rabbitTemplate         = rabbitTemplate;
     }
 
-    // ─── UPLOAD VIDEO ─────────────────────────────────────────────
     @PostMapping("/upload")
     public ResponseEntity<?> uploadVideo(@RequestParam("file") MultipartFile file) {
-
-        // Validate file type
         String originalName = file.getOriginalFilename();
         if (originalName == null ||
                 (!originalName.toLowerCase().endsWith(".mp4") &&
@@ -60,24 +55,19 @@ public class VideoController {
             );
         }
 
-        // Get logged-in username
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         String uploadedBy = auth.getName();
 
         try {
-            // Generate unique filename to avoid conflicts
             String ext      = originalName.substring(originalName.lastIndexOf('.'));
             String fileName = UUID.randomUUID().toString() + ext;
             Path   filePath = Paths.get(uploadPath, fileName);
 
-            // Save file to uploads folder
             Files.createDirectories(filePath.getParent());
             Files.copy(file.getInputStream(), filePath, StandardCopyOption.REPLACE_EXISTING);
 
-            // Save record to DB with PENDING status
             Integer videoId = videoRepository.save(originalName, filePath.toString(), uploadedBy);
-
-            System.out.println("Video uploaded: " + originalName + " → " + filePath);
+            System.out.println(" Video uploaded: " + originalName + " → " + filePath);
 
             return ResponseEntity.ok(Map.of(
                     "message",  "Video uploaded successfully",
@@ -93,75 +83,77 @@ public class VideoController {
         }
     }
 
-    // ─── GET ALL VIDEOS ───────────────────────────────────────────
     @GetMapping
     public ResponseEntity<List<VideoUpload>> getAllVideos() {
         return ResponseEntity.ok(videoRepository.findAll());
     }
 
-    // ─── GET PENDING VIDEOS ───────────────────────────────────────
     @GetMapping("/pending")
     public ResponseEntity<List<VideoUpload>> getPendingVideos() {
         return ResponseEntity.ok(videoRepository.findPending());
     }
 
-    // ─── GET COMPLETED VIDEOS ─────────────────────────────────────
     @GetMapping("/completed")
     public ResponseEntity<List<VideoUpload>> getCompletedVideos() {
         return ResponseEntity.ok(videoRepository.findCompleted());
     }
 
-    // ─── GET PROCESSED FILES FOR A VIDEO ──────────────────────────
     @GetMapping("/{id}/processed")
     public ResponseEntity<List<VideoProcessed>> getProcessedFiles(@PathVariable Integer id) {
         return ResponseEntity.ok(videoRepository.findProcessedByVideoId(id));
     }
 
-    // ─── PROCESS VIDEO ────────────────────────────────────────────
     @PostMapping("/{id}/process")
     public ResponseEntity<?> processVideo(@PathVariable Integer id) {
         VideoUpload video = videoRepository.findById(id);
+        if (video == null) return ResponseEntity.notFound().build();
 
-        if (video == null) {
-            return ResponseEntity.notFound().build();
-        }
-
-        // Atomically claim the video (PENDING -> PROCESSING), guards against double-clicks
-        boolean claimed = videoRepository.markProcessing(id);
-        if (!claimed) {
+        if (!"PENDING".equals(video.getStatus())) {
             return ResponseEntity.badRequest().body(
                     Map.of("error", "Video is already " + video.getStatus())
             );
         }
 
-        // Publish job to RabbitMQ — VideoProcessingService's @RabbitListener picks it up
-        rabbitTemplate.convertAndSend(
-                RabbitMQConfig.VIDEO_EXCHANGE,
-                RabbitMQConfig.VIDEO_KEY,
-                id
-        );
+        videoProcessingService.processNow(video);
 
         return ResponseEntity.accepted().body(Map.of(
-                "message",  "Video processing queued",
+                "message",  "Video processing started",
                 "video_id", id,
                 "status",   "PROCESSING"
         ));
     }
 
-    // ─── STREAM/PLAY VIDEO ────────────────────────────────────────
-    @GetMapping("/stream/{filename:.+}")
-    public ResponseEntity<Resource> streamVideo(@PathVariable String filename) {
+    // ─── STREAM VIDEO ─────────────────────────────────────────────
+    @GetMapping("/stream/{videoId}/{filename:.+}")
+    public ResponseEntity<Resource> streamVideo(@PathVariable Integer videoId,
+                                                @PathVariable String filename) {
         try {
-            Path videoPath = Paths.get(processedPath, filename);
+            Path videoPath = Paths.get(processedPath, String.valueOf(videoId), filename);
             Resource resource = new UrlResource(videoPath.toUri());
 
-            if (!resource.exists()) {
-                return ResponseEntity.notFound().build();
-            }
+            if (!resource.exists()) return ResponseEntity.notFound().build();
 
             return ResponseEntity.ok()
                     .contentType(MediaType.parseMediaType("video/mp4"))
                     .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + filename + "\"")
+                    .body(resource);
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.internalServerError().build();
+        }
+    }
+
+    @GetMapping("/thumbnail/{filename:.+}")
+    public ResponseEntity<Resource> getThumbnail(@PathVariable String filename) {
+        try {
+            Path thumbPath = Paths.get(thumbnailPath, filename);
+            Resource resource = new UrlResource(thumbPath.toUri());
+
+            if (!resource.exists()) return ResponseEntity.notFound().build();
+
+            return ResponseEntity.ok()
+                    .contentType(MediaType.IMAGE_JPEG)
                     .body(resource);
 
         } catch (Exception e) {

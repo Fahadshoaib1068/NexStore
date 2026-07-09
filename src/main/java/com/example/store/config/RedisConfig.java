@@ -15,7 +15,7 @@ public class RedisConfig {
     public RedisTemplate<String, Object> redisTemplate(RedisConnectionFactory factory) {
         RedisTemplate<String, Object> template = new RedisTemplate<>();
         template.setConnectionFactory(factory);
-
+        // setKeySerializer stores keys as plain text
         template.setKeySerializer(new StringRedisSerializer());
         template.setValueSerializer(RedisSerializer.json());
 

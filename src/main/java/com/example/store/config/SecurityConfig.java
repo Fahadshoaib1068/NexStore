@@ -17,7 +17,7 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 @Configuration
-@EnableWebSecurity
+@EnableWebSecurity  // controls the secruity for the application at debug
 public class SecurityConfig {
 
     private final JwtFilter jwtFilter;
@@ -38,6 +38,7 @@ public class SecurityConfig {
     }
 
     // ─── AUTHENTICATION PROVIDER ──────────────────────────────────
+    //Sets up credential verification using a database service (CustomUserDetailsService)
     @Bean
     public AuthenticationProvider authenticationProvider() {
         DaoAuthenticationProvider provider = new DaoAuthenticationProvider(userDetailsService);
@@ -46,7 +47,7 @@ public class SecurityConfig {
     }
 
     // ─── AUTHENTICATION MANAGER ───────────────────────────────────
-    @Bean
+    @Bean //manage the authentication process(login, logout, etc)
     public AuthenticationManager authenticationManager(
             AuthenticationConfiguration config) throws Exception {
         return config.getAuthenticationManager();
@@ -56,7 +57,7 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
-                .csrf(csrf -> csrf.disable())
+                .csrf(csrf -> csrf.disable())  // disable csrf for now
                 .sessionManagement(session -> session
                         .sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
@@ -82,8 +83,10 @@ public class SecurityConfig {
                         // ── USERS (admin only) ──
                         .requestMatchers("/users/**").hasAnyRole("ADMIN", "SUPER_ADMIN")
                         // ── VIDEOS ──
-                        .requestMatchers("/videos/stream/**").hasAnyRole("CUSTOMER", "STAFF", "ADMIN", "SUPER_ADMIN")
+                        .requestMatchers("/videos/thumbnail/**").permitAll()
+                        .requestMatchers("/videos/stream/**").permitAll()
                         .requestMatchers("/videos/**").hasRole("SUPER_ADMIN")
+                        .requestMatchers("/analytics/**").hasRole("SUPER_ADMIN")
                         // ── anything else needs login ──
                         .anyRequest().authenticated()
                 )

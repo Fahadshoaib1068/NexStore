@@ -7,17 +7,19 @@ public class VideoUpload {
     private String  status;
     private String  uploaded_at;
     private String  uploaded_by;
+    private String thumbnail_path;
 
     public VideoUpload() {}
 
     public VideoUpload(Integer video_id, String original_name, String file_path,
-                       String status, String uploaded_at, String uploaded_by) {
+                       String status, String uploaded_at, String uploaded_by, String thumbnail_path) {
         this.video_id      = video_id;
         this.original_name = original_name;
         this.file_path     = file_path;
         this.status        = status;
         this.uploaded_at   = uploaded_at;
         this.uploaded_by   = uploaded_by;
+        this.thumbnail_path = thumbnail_path;
     }
 
     public Integer getVideo_id()      { return video_id; }
@@ -26,6 +28,7 @@ public class VideoUpload {
     public String  getStatus()        { return status; }
     public String  getUploaded_at()   { return uploaded_at; }
     public String  getUploaded_by()   { return uploaded_by; }
+    public String getThumbnail_path() { return thumbnail_path; }
 
     public void setVideo_id(Integer video_id)           { this.video_id = video_id; }
     public void setOriginal_name(String original_name)  { this.original_name = original_name; }
@@ -33,4 +36,5 @@ public class VideoUpload {
     public void setStatus(String status)                { this.status = status; }
     public void setUploaded_at(String uploaded_at)      { this.uploaded_at = uploaded_at; }
     public void setUploaded_by(String uploaded_by)      { this.uploaded_by = uploaded_by; }
+    public void setThumbnail_path(String thumbnail_path) { this.thumbnail_path = thumbnail_path; }
 }

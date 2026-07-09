@@ -1,9 +1,7 @@
 package com.example.store.service;
 
-import com.example.store.config.RabbitMQConfig;
 import com.example.store.model.VideoUpload;
 import com.example.store.repository.VideoRepository;
-import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -19,35 +17,44 @@ public class VideoProcessingService {
     @Value("${video.processed.path}")
     private String processedPath;
 
+    @Value("${video.thumbnail.path}")
+    private String thumbnailPath;
+
     public VideoProcessingService(VideoRepository videoRepository) {
         this.videoRepository = videoRepository;
     }
 
-    // ─── RABBITMQ CONSUMER
-    @RabbitListener(queues = RabbitMQConfig.VIDEO_QUEUE, concurrency = "1")
-    public void handleVideoProcessing(Integer videoId) {
-        VideoUpload video = videoRepository.findById(videoId);
-        if (video == null) {
-            System.out.println("Video #" + videoId + " not found, skipping");
-            return;
-        }
-        processVideo(video);
+    // ─── MANUAL TRIGGER ───────────────────────────────────────────
+    public void processNow(VideoUpload video) {
+        new Thread(() -> processVideo(video)).start();
     }
 
-    // ─── MAIN PROCESSING LOGIC ────────────────────────────────────
+    // ─── MAIN PROCESSING ──────────────────────────────────────────
     private void processVideo(VideoUpload video) {
         Integer videoId   = video.getVideo_id();
         String  inputPath = video.getFile_path();
 
         System.out.println("Starting processing for video #" + videoId);
-        // status is already PROCESSING — set atomically by markProcessing() in the controller
+        videoRepository.updateStatus(videoId, "PROCESSING");
 
         try {
-            // Create output directory for this video
+            // Create output directory for processed videos
             Path outputDir = Paths.get(processedPath, String.valueOf(videoId));
             Files.createDirectories(outputDir);
 
-            // Process 3 qualities
+            // Create thumbnails directory
+            Path thumbDir = Paths.get(thumbnailPath);
+            Files.createDirectories(thumbDir);
+
+            // Generate thumbnail first
+            boolean thumbOk = generateThumbnail(inputPath, videoId);
+            if (thumbOk) {
+                System.out.println(" Thumbnail generated for video #" + videoId);
+            } else {
+                System.out.println("Thumbnail failed but continuing processing...");
+            }
+
+            // Convert to 3 qualities
             boolean success =
                     convertVideo(inputPath, outputDir, videoId, "360p",  640,  360) &&
                             convertVideo(inputPath, outputDir, videoId, "480p",  854,  480) &&
@@ -55,20 +62,68 @@ public class VideoProcessingService {
 
             if (success) {
                 videoRepository.updateStatus(videoId, "COMPLETED");
-                System.out.println("Video #" + videoId + " processing COMPLETED");
+                System.out.println(" Video #" + videoId + " COMPLETED");
             } else {
                 videoRepository.updateStatus(videoId, "FAILED");
-                System.out.println("Video #" + videoId + " processing FAILED");
+                System.out.println(" Video #" + videoId + " FAILED");
             }
 
         } catch (Exception e) {
             e.printStackTrace();
             videoRepository.updateStatus(videoId, "FAILED");
-            System.out.println(" Video #" + videoId + " processing FAILED: " + e.getMessage());
         }
     }
 
-    // ─── CONVERT VIDEO USING FFMPEG USING  DOCKER ────────────────────
+    // ─── GENERATE THUMBNAIL ───────────────────────────────────────
+    private boolean generateThumbnail(String inputPath, Integer videoId) {
+        try {
+            String outputFileName = videoId + "_thumbnail.jpg";
+            Path   outputPath     = Paths.get(thumbnailPath, outputFileName);
+
+            System.out.println("Generating thumbnail for video #" + videoId);
+
+            ProcessBuilder pb = new ProcessBuilder(
+                    "docker", "run", "--rm",
+                    "-v", getVideosRootPath() + ":/videos",
+                    "linuxserver/ffmpeg",
+                    "-ss", "00:00:01",           // grab frame at 1 second
+                    "-i", toDockerPath(inputPath),
+                    "-vframes", "1",             // only 1 frame
+                    "-f", "image2",
+                    toDockerPath(outputPath.toString())
+            );
+
+            pb.redirectErrorStream(true);
+            Process process = pb.start();
+
+            BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(process.getInputStream())
+            );
+            String line;
+            while ((line = reader.readLine()) != null) {
+                System.out.println("[FFmpeg] " + line);
+            }
+
+            int exitCode = process.waitFor();
+
+            if (exitCode == 0) {
+                // Save thumbnail path to DB
+                String relativePath = outputFileName; // just the filename
+                videoRepository.updateThumbnail(videoId, relativePath);
+                System.out.println("Thumbnail saved: " + relativePath);
+                return true;
+            } else {
+                System.out.println("Thumbnail generation failed — exit code: " + exitCode);
+                return false;
+            }
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            return false;
+        }
+    }
+
+    // ─── CONVERT VIDEO ────────────────────────────────────────────
     private boolean convertVideo(String inputPath, Path outputDir,
                                  Integer videoId, String quality,
                                  int width, int height) {
@@ -76,7 +131,7 @@ public class VideoProcessingService {
             String outputFileName = videoId + "_" + quality + ".mp4";
             Path   outputPath     = outputDir.resolve(outputFileName);
 
-            System.out.println(" Converting to " + quality + " → " + outputPath);
+            System.out.println("Converting to " + quality + " → " + outputPath);
 
             ProcessBuilder pb = new ProcessBuilder(
                     "docker", "run", "--rm",
@@ -108,7 +163,7 @@ public class VideoProcessingService {
             if (exitCode == 0) {
                 String relativeOutput = videoId + "/" + outputFileName;
                 videoRepository.saveProcessed(videoId, quality, relativeOutput);
-                System.out.println(" " + quality + " done — exit code: " + exitCode);
+                System.out.println(" " + quality + " done");
                 return true;
             } else {
                 System.out.println(" " + quality + " failed — exit code: " + exitCode);
@@ -121,8 +176,7 @@ public class VideoProcessingService {
         }
     }
 
-    // ─── HELPERS ────────────────────────────────────────────────────
-
+    // ─── HELPERS ──────────────────────────────────────────────────
     private String getVideosRootPath() {
         Path uploadsPath = Paths.get(processedPath).getParent();
         return uploadsPath.toString().replace("\\", "/");

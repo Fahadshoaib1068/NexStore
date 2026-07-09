@@ -59,6 +59,7 @@ function switchTab(btn, name) {
     btn.classList.add("active");
     document.getElementById("panel-" + name).classList.add("active");
     if (name === "videos") loadAllVideos();
+    if (name === "API") startAnalyticsPolling(); else stopAnalyticsPolling();
 }
 
 // ── MESSAGES ──────────────────────────────────────────────────────
@@ -675,24 +676,42 @@ async function loadCompletedVideos() {
         }
 
         const cards = await Promise.all(videos.map(async (v) => {
-            const pRes = await authFetch(`${VIDEOS_URL}/${v.video_id}/processed`);
+            const pRes      = await authFetch(`${VIDEOS_URL}/${v.video_id}/processed`);
             const qualities = pRes.ok ? await pRes.json() : [];
             videoQualitiesMap[v.video_id] = { name: v.original_name, qualities };
 
-            const qualityBtns = qualities.map(q =>
-                `<button class="quality-btn" onclick="openVideoModal(${v.video_id}, '${q.quality}')">${q.quality}</button>`
-            ).join("");
+            // Thumbnail URL — fallback to placeholder if no thumbnail
+            const thumbSrc = v.thumbnail_path
+                ? `${VIDEOS_URL}/thumbnail/${v.thumbnail_path}`
+                : `https://placehold.co/320x180/1a1a2e/4f8ef7?text=No+Thumbnail`;
 
             return `
-                <div class="video-card">
-                    <h4>${escapeHtml(v.original_name)}</h4>
-                    <div class="video-meta">#${v.video_id} · uploaded by ${v.uploaded_by ?? "—"}</div>
-                    <div class="video-qualities">${qualityBtns || '<span class="video-meta">No processed files found</span>'}</div>
+                <div class="video-card" onclick="openVideoModal(${v.video_id}, '${qualities[0]?.quality || ''}')">
+                    <div class="video-thumb-wrapper">
+                        <img src="${thumbSrc}" 
+                             alt="${escapeHtml(v.original_name)}"
+                             class="video-thumbnail"
+                             onerror="this.src='https://placehold.co/320x180/1a1a2e/4f8ef7?text=No+Thumbnail'"/>
+                        <div class="play-overlay">▶</div>
+                    </div>
+                    <div class="video-card-info">
+                        <h4>${escapeHtml(v.original_name)}</h4>
+                        <div class="video-meta">#${v.video_id} · ${v.uploaded_by ?? "—"}</div>
+                        <div class="video-qualities">
+                            ${qualities.map(q =>
+                `<button class="quality-btn" 
+                                    onclick="event.stopPropagation(); openVideoModal(${v.video_id}, '${q.quality}')">
+                                    ${q.quality}
+                                </button>`
+            ).join("")}
+                        </div>
+                    </div>
                 </div>
             `;
         }));
 
         grid.innerHTML = cards.join("");
+
     } catch (err) {
         grid.innerHTML = `<p class="empty-state">Failed to load processed recordings.</p>`;
     }
@@ -731,4 +750,85 @@ function closeVideoModal() {
     player.removeAttribute("src");
     player.load();
     modal.classList.remove("open");
+}
+
+let analyticsInterval = null;
+
+function startAnalyticsPolling() {
+    loadAnalytics();
+    if (analyticsInterval) clearInterval(analyticsInterval);
+    analyticsInterval = setInterval(loadAnalytics, 3000);
+}
+
+function stopAnalyticsPolling() {
+    if (analyticsInterval) clearInterval(analyticsInterval);
+    analyticsInterval = null;
+}
+
+async function loadAnalytics() {
+    try {
+        const res = await authFetch("/analytics/hits");
+        if (!res.ok) return;
+        const data = await res.json();
+
+        document.getElementById("totalRequests").textContent = data.totalRequests;
+        document.getElementById("totalApis").textContent      = data.totalApis;
+        document.getElementById("avgTime").textContent        = data.avgResponseMs + " ms";
+        document.getElementById("errorRate").textContent      = data.errorRate + "%";
+
+        renderApiChart(data.hits);
+    } catch (err) {
+        console.error("Analytics fetch failed:", err);
+    }
+}
+
+function renderApiChart(hits) {
+    const entries = Object.entries(hits).sort((a, b) => b[1] - a[1]);
+    const svg = d3.select("#chart");
+    svg.selectAll("*").remove();
+
+    if (entries.length === 0) {
+        svg.attr("height", 60);
+        svg.append("text")
+            .attr("x", 10).attr("y", 30)
+            .attr("fill", "#94a3b8").attr("font-size", "13px")
+            .text("No API traffic recorded yet.");
+        return;
+    }
+
+    const rowHeight = 48;
+    const barHeight = 28;
+    const labelWidth = 140;
+    const width  = svg.node().clientWidth || 600;
+    const height = entries.length * rowHeight + 10;
+    svg.attr("height", height);
+
+    const maxVal  = d3.max(entries, d => d[1]) || 1;
+    const scaleX  = d3.scaleLinear().domain([0, maxVal]).range([0, width - labelWidth - 60]);
+
+    const rows = svg.selectAll("g.row")
+        .data(entries)
+        .enter()
+        .append("g")
+        .attr("class", "row")
+        .attr("transform", (d, i) => `translate(0, ${i * rowHeight})`);
+
+    rows.append("text")
+        .attr("x", 0).attr("y", barHeight / 2).attr("dy", "0.35em")
+        .attr("fill", "#94a3b8").attr("font-size", "13px")
+        .text(d => d[0]);
+
+    rows.append("rect")
+        .attr("x", labelWidth).attr("y", 0)
+        .attr("height", barHeight).attr("rx", 4)
+        .attr("fill", "#4f8ef7")
+        .attr("width", 0)
+        .transition().duration(300)
+        .attr("width", d => scaleX(d[1]));
+
+    rows.append("text")
+        .attr("x", d => labelWidth + scaleX(d[1]) + 8)
+        .attr("y", barHeight / 2).attr("dy", "0.35em")
+        .attr("fill", "#e2e8f0").attr("font-size", "13px")
+        .text(d => d[1]);
 }
