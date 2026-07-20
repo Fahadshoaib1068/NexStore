@@ -11,6 +11,7 @@ public class OrderDetail {
     private String customer_first_name;
     private String customer_last_name;
     private String customer_email;
+    private String payement_status;
 
     // All order items loaded eagerly
     private List<OrderItem> items;
@@ -19,7 +20,7 @@ public class OrderDetail {
 
     public OrderDetail(Integer order_id, String order_date, double total_amount,
                        String customer_first_name, String customer_last_name,
-                       String customer_email, List<OrderItem> items) {
+                       String customer_email, String payement_status, List<OrderItem> items) {
         this.order_id = order_id;
         this.order_date = order_date;
         this.total_amount = total_amount;
@@ -27,6 +28,7 @@ public class OrderDetail {
         this.customer_last_name = customer_last_name;
         this.customer_email = customer_email;
         this.items = items;
+        this.payement_status = payement_status;
     }
 
     public Integer getOrder_id()            { return order_id; }
@@ -36,6 +38,7 @@ public class OrderDetail {
     public String getCustomer_last_name()   { return customer_last_name; }
     public String getCustomer_email()       { return customer_email; }
     public List<OrderItem> getItems()       { return items; }
+    public String getPayement_status()      { return payement_status; }
 
     public void setOrder_id(Integer order_id)                   { this.order_id = order_id; }
     public void setOrder_date(String order_date)                { this.order_date = order_date; }
@@ -44,4 +47,5 @@ public class OrderDetail {
     public void setCustomer_last_name(String customer_last_name)   { this.customer_last_name = customer_last_name; }
     public void setCustomer_email(String customer_email)           { this.customer_email = customer_email; }
     public void setItems(List<OrderItem> items)                 { this.items = items; }
+    public void setPayement_status(String payement_status)        { this.payement_status = payement_status; }
 }

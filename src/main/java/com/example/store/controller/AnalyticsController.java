@@ -14,6 +14,11 @@ public class AnalyticsController {
         this.apiAnalyticsService = apiAnalyticsService;
     }
 
+    @GetMapping("/timeline")
+    public Map<String, Object> getTimeline() {
+        return apiAnalyticsService.getTimeline();
+    }
+
     @GetMapping("/hits")
     public Map<String, Object> getHits() {
         return Map.of(

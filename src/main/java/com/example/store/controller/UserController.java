@@ -39,10 +39,8 @@ public class UserController {
 
         userRepository.updateUserRole(user.getUser_id(), roleId);
 
-        return ResponseEntity.ok(Map.of(
-                "message", "User " + username + " promoted to " + newRole,
-                "username", username,
-                "newRole", newRole
-        ));
+        return ResponseEntity.ok(Map.of("message", "User role updated successfully"));
+
     }
+
 }

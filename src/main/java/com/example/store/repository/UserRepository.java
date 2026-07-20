@@ -81,7 +81,7 @@ public class UserRepository {
         return false;
     }
 
-    // ─── SAVE NEW USER (WRITE master, then sync replica with same ID) ──
+    // ─── SAVE NEW USER (WRITE to master DB) ─────────────────────────
     public Integer save(String username, String email, String passwordHash) {
         String sql = "INSERT INTO users (username, email, passwordhash) VALUES (?, ?, ?)";
         Integer generatedId = null;
@@ -99,33 +99,16 @@ public class UserRepository {
             return null;
         }
 
-        if (generatedId != null) {
-            try (Connection replicaConn = DBConnection.getReplicaConnection()) {
-                replicaConn.createStatement().execute("SET IDENTITY_INSERT users ON");
-                String replicaSql = "INSERT INTO users (userid, username, email, passwordhash) VALUES (?, ?, ?, ?)";
-                try (PreparedStatement ps = replicaConn.prepareStatement(replicaSql)) {
-                    ps.setInt(1, generatedId);
-                    ps.setString(2, username);
-                    ps.setString(3, email);
-                    ps.setString(4, passwordHash);
-                    ps.executeUpdate();
-                }
-                replicaConn.createStatement().execute("SET IDENTITY_INSERT users OFF");
-                System.out.println("User #" + generatedId + " synced to replica");
-            } catch (SQLException e) {
-                System.out.println("Failed to sync user to replica: " + e.getMessage());
-                e.printStackTrace();
-            }
-        }
         return generatedId;
     }
 
     public void assignRole(Integer userId, Integer roleId) {
-        try {
-            DBConnection.executeOnBoth(
-                    "INSERT INTO user_roles (userid, roleid) VALUES (?, ?)",
-                    ps -> { ps.setInt(1, userId); ps.setInt(2, roleId); }
-            );
+        String sql = "INSERT INTO user_roles (userid, roleid) VALUES (?, ?)";
+        try (Connection conn = DBConnection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setInt(1, userId);
+            ps.setInt(2, roleId);
+            ps.executeUpdate();
         } catch (SQLException e) {
             e.printStackTrace();
         }
@@ -145,11 +128,12 @@ public class UserRepository {
     }
 
     public void updateUserRole(Integer userId, Integer newRoleId) {
-        try {
-            DBConnection.executeOnBoth(
-                    "UPDATE user_roles SET roleid = ? WHERE userid = ?",
-                    ps -> { ps.setInt(1, newRoleId); ps.setInt(2, userId); }
-            );
+        String sql = "UPDATE user_roles SET roleid = ? WHERE userid = ?";
+        try (Connection conn = DBConnection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setInt(1, newRoleId);
+            ps.setInt(2, userId);
+            ps.executeUpdate();
         } catch (SQLException e) {
             e.printStackTrace();
         }

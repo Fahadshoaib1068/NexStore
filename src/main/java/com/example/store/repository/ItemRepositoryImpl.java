@@ -28,7 +28,7 @@ public class ItemRepositoryImpl implements ItemRepository {
         );
     }
 
-    // ─── FIND ALL (READ → replica, with cache) ─────────────────────
+    // ─── FIND ALL (READ from master DB) ──────────────────────────────
     @Override
     public List<Item> findAll() {
         String cacheKey = "items:all";
@@ -39,9 +39,9 @@ public class ItemRepositoryImpl implements ItemRepository {
             return (List<Item>) cached;
         }
 
-        System.out.println("Cache MISS — fetching from REPLICA DB");
+        System.out.println("Cache MISS — fetching from DB");
         List<Item> items = new ArrayList<>();
-        try (Connection conn = DBConnection.getReplicaConnection();   // ← READ from replica
+        try (Connection conn = DBConnection.getConnection();
              Statement stmt = conn.createStatement();
              ResultSet rs = stmt.executeQuery("SELECT * FROM item")) {
 
@@ -55,7 +55,7 @@ public class ItemRepositoryImpl implements ItemRepository {
         return items;
     }
 
-    // ─── FIND BY ID (READ → replica, with cache) ───────────────────
+    // ─── FIND BY ID (READ from master DB with cache) ───────────────
     @Override
     public Item findById(Integer id) {
         String cacheKey = "items:" + id;
@@ -66,8 +66,8 @@ public class ItemRepositoryImpl implements ItemRepository {
             return (Item) cached;
         }
 
-        System.out.println("Cache MISS — fetching from REPLICA DB");
-        try (Connection conn = DBConnection.getReplicaConnection();   // ← READ from replica
+        System.out.println("Cache MISS — fetching from DB");
+        try (Connection conn = DBConnection.getConnection();
              PreparedStatement ps = conn.prepareStatement("SELECT * FROM item WHERE item_id = ?")) {
 
             ps.setInt(1, id);
@@ -85,13 +85,12 @@ public class ItemRepositoryImpl implements ItemRepository {
         return null;
     }
 
-    // ─── SAVE (WRITE → master, then sync to replica) ───────────────
+    // ─── SAVE (WRITE to master DB) ──────────────────────────────────
     @Override
     public void save(Item item) {
         String sql = "INSERT INTO item (item_id, item_name, item_description, price, stock_quantity) VALUES (?, ?, ?, ?, ?)";
 
-        // 1. Write to MASTER
-        try (Connection conn = DBConnection.getConnection();          // ← WRITE to master
+        try (Connection conn = DBConnection.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
 
             ps.setInt(1,    item.getItem_id());
@@ -100,27 +99,11 @@ public class ItemRepositoryImpl implements ItemRepository {
             ps.setDouble(4, item.getPrice());
             ps.setInt(5,    item.getStock_quantity());
             ps.executeUpdate();
+            System.out.println("Item " + item.getItem_id() + " saved to DB");
 
         } catch (SQLException e) {
             e.printStackTrace();
-            return; // don't replicate if master write failed
-        }
-
-        // 2. Replicate same write to REPLICA
-        try (Connection conn = DBConnection.getReplicaConnection();   // ← SYNC to replica
-             PreparedStatement ps = conn.prepareStatement(sql)) {
-
-            ps.setInt(1,    item.getItem_id());
-            ps.setString(2, item.getItem_name());
-            ps.setString(3, item.getItem_description());
-            ps.setDouble(4, item.getPrice());
-            ps.setInt(5,    item.getStock_quantity());
-            ps.executeUpdate();
-            System.out.println("Replicated INSERT to Ecommerce_Replica");
-
-        } catch (SQLException e) {
-            System.out.println("Replication failed for item " + item.getItem_id());
-            e.printStackTrace();
+            return;
         }
 
         cacheService.evict("items:all");
@@ -128,17 +111,18 @@ public class ItemRepositoryImpl implements ItemRepository {
 
     @Override
     public void update(Integer id, Item item) {
-        try {
-            DBConnection.executeOnBoth(
-                    "UPDATE item SET item_name = ?, item_description = ?, price = ?, stock_quantity = ? WHERE item_id = ?",
-                    ps -> {
-                        ps.setString(1, item.getItem_name());
-                        ps.setString(2, item.getItem_description());
-                        ps.setDouble(3, item.getPrice());
-                        ps.setInt(4, item.getStock_quantity());
-                        ps.setInt(5, id);
-                    }
-            );
+        String sql = "UPDATE item SET item_name = ?, item_description = ?, price = ?, stock_quantity = ? WHERE item_id = ?";
+
+        try (Connection conn = DBConnection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+
+            ps.setString(1, item.getItem_name());
+            ps.setString(2, item.getItem_description());
+            ps.setDouble(3, item.getPrice());
+            ps.setInt(4, item.getStock_quantity());
+            ps.setInt(5, id);
+            ps.executeUpdate();
+
         } catch (SQLException e) {
             e.printStackTrace();
             return;
@@ -149,11 +133,14 @@ public class ItemRepositoryImpl implements ItemRepository {
 
     @Override
     public void delete(Integer id) {
-        try {
-            DBConnection.executeOnBoth(
-                    "DELETE FROM item WHERE item_id = ?",
-                    ps -> ps.setInt(1, id)
-            );
+        String sql = "DELETE FROM item WHERE item_id = ?";
+
+        try (Connection conn = DBConnection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+
+            ps.setInt(1, id);
+            ps.executeUpdate();
+
         } catch (SQLException e) {
             e.printStackTrace();
             return;
@@ -211,7 +198,7 @@ public class ItemRepositoryImpl implements ItemRepository {
 
         List<Item> items = new ArrayList<>();
 
-        try (Connection conn = DBConnection.getReplicaConnection();
+        try (Connection conn = DBConnection.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql.toString())) {
 
             for (int i = 0; i < params.size(); i++) {

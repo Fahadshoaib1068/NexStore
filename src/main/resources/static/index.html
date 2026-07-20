@@ -14,13 +14,33 @@
 </head>
 <body>
 
+<div class="stars"></div>
+
+<div class="shooting-star"></div>
+<div class="shooting-star"></div>
+<div class="shooting-star"></div>
+<div class="shooting-star"></div>
+<div class="shooting-star"></div>
+
 <!-- ── HEADER ── -->
 <header class="site-header">
     <div class="header-bg"></div>
     <div class="header-content">
         <div class="logo">
-            <span class="logo-icon">⬡</span>
-            <span class="logo-text">NexStore</span>
+            <div class="cube-container">
+                <div class="cube">
+                    <div class="cube-face front">API</div>
+                    <div class="cube-face back">JWT</div>
+                    <div class="cube-face right">SQL</div>
+                    <div class="cube-face left">Redis</div>
+                    <div class="cube-face top">Docker</div>
+                    <div class="cube-face bottom">RabbitMQ</div>
+                </div>
+            </div>
+            <div class="logo-text">
+                <h1>NexStore</h1>
+                <p class="header-sub">E-Commerce Management Console</p>
+            </div>
         </div>
         <p class="header-sub">E-Commerce Management Console</p>
         <div class="header-stats">
@@ -42,6 +62,7 @@
     <button class="tab-btn auth-staff" data-panel="add"    onclick="switchTab(this,'add')">    Add Item    </button>
     <button class="tab-btn auth-staff" data-panel="update" onclick="switchTab(this,'update')"> Update Item </button>
     <button class="tab-btn orders-tab" data-panel="orders" onclick="switchTab(this,'orders')"> Orders     </button>
+    <button class="tab-btn auth-customer" data-panel="subscription" onclick="switchTab(this,'subscription')"> Subscription </button>
     <button class="tab-btn auth-admin" data-panel="users"  onclick="switchTab(this,'users')">  Users      </button>
     <button class="tab-btn auth-superadmin" data-panel="videos" onclick="switchTab(this,'videos')"> CCTV </button>
     <button class="tab-btn auth-superadmin" data-panel="API" onclick="switchTab(this,'API')">API Check</button>
@@ -229,13 +250,21 @@
                     <th>Customer ID</th>
                     <th>Date</th>
                     <th>Total</th>
+                    <th>Payment</th>
                     <th>Actions</th>
                 </tr>
                 </thead>
                 <tbody id="orders-tbody">
-                <tr><td colspan="5" class="empty-state">Click Refresh to load orders</td></tr>
+                <tr><td colspan="6" class="empty-state">Click Refresh to load orders</td></tr>
                 </tbody>
             </table>
+        </div>
+        <div style="display:flex;gap:0.75rem;margin-top:1rem;align-items:center;flex-wrap:wrap;">
+            <div id="page-info-orders" style="color:var(--text-muted);font-size:0.85rem;margin-left:auto;"></div>
+            <div class="pagination">
+                <button id="btn-prev-orders" onclick="prevPageOrders()" class="btn">← Prev </button>
+                <button id="btn-next-orders" onclick="nextPageOrders()" class="btn">Next →</button>
+            </div>
         </div>
         <div id="msg-orders" class="message"></div>
 
@@ -299,6 +328,33 @@
         <div id="msg-delete-order" class="message"></div>
     </section>
 
+    <!-- ── PANEL: SUBSCRIPTION ── -->
+    <section id="panel-subscription" class="panel">
+        <div class="panel-header">
+            <div>
+                <h2>Subscription</h2>
+                <p class="panel-desc">Subscribe to get discounts on all your orders</p>
+            </div>
+        </div>
+
+        <!-- Current subscription status -->
+        <div id="current-sub-box" style="margin-bottom:1.5rem;"></div>
+
+        <!-- Plans grid -->
+        <div class="section-divider"></div>
+        <div class="panel-header">
+            <div>
+                <h2>Available Plans</h2>
+                <p class="panel-desc">Choose a plan that works for you</p>
+            </div>
+            <button class="action-btn primary" onclick="loadSubscriptionPlans()">↻ Refresh</button>
+        </div>
+        <div id="plans-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:1.25rem;margin-top:1rem;">
+            <p class="empty-state">Click Refresh to load plans</p>
+        </div>
+        <div id="msg-subscription" class="message"></div>
+    </section>
+
     <!-- ── PANEL: USERS ── -->
     <section id="panel-users" class="panel">
         <div class="panel-header">
@@ -324,6 +380,36 @@
         </div>
         <button class="action-btn primary" onclick="promoteUser()" style="margin-top:1rem;">Promote User</button>
         <div id="msg-users" class="message"></div>
+
+        <!-- Customer Subscriptions -->
+        <div class="section-divider"></div>
+        <div class="panel-header">
+            <div>
+                <h2>Customer Subscriptions</h2>
+                <p class="panel-desc">View all active and inactive customer subscriptions</p>
+            </div>
+            <button class="action-btn primary" onclick="loadAllSubscriptions()">↻ Refresh</button>
+        </div>
+        <div class="table-wrapper">
+            <table>
+                <thead>
+                <tr>
+                    <th>Subscription ID</th><th>Customer</th><th>Plan</th><th>Status</th><th>Started</th><th>Discount</th>
+                </tr>
+                </thead>
+                <tbody id="subscriptions-tbody">
+                <tr><td colspan="6" class="empty-state">Click Refresh to load subscriptions</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <div style="display:flex;gap:0.75rem;margin-top:1rem;align-items:center;flex-wrap:wrap;">
+            <div id="page-info-subs" style="color:var(--text-muted);font-size:0.85rem;margin-left:auto;"></div>
+            <div class="pagination">
+                <button id="btn-prev-subs" onclick="prevPageSubs()" class="btn">← Prev </button>
+                <button id="btn-next-subs" onclick="nextPageSubs()" class="btn">Next →</button>
+            </div>
+        </div>
+        <div id="msg-subscriptions" class="message"></div>
     </section>
 
     <!-- ── PANEL: VIDEOS (CCTV) ── -->
@@ -365,6 +451,13 @@
                 <tr><td colspan="6" class="empty-state">Click Refresh to load recordings</td></tr>
                 </tbody>
             </table>
+        </div>
+        <div style="display:flex;gap:0.75rem;margin-top:1rem;align-items:center;flex-wrap:wrap;">
+            <div id="page-info-videos" style="color:var(--text-muted);font-size:0.85rem;margin-left:auto;"></div>
+            <div class="pagination">
+                <button id="btn-prev-videos" onclick="prevPageVideos()" class="btn">← Prev </button>
+                <button id="btn-next-videos" onclick="nextPageVideos()" class="btn">Next →</button>
+            </div>
         </div>
         <div id="msg-videos" class="message"></div>
 
@@ -414,6 +507,7 @@
                 <h2>API Hits</h2>
 
                 <svg id="chart"></svg>
+                <div id="chart-tooltip"></div>
             </div>
 
         </div>

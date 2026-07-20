@@ -33,6 +33,7 @@ public class ApiAnalyticsFilter implements Filter {
                 long duration = System.currentTimeMillis() - start;
                 apiAnalyticsService.record(apiName, duration, res.getStatus() >= 400);
             }
+            
         }
     }
 

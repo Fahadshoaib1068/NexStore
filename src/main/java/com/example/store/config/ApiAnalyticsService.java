@@ -4,10 +4,9 @@ import com.example.store.repository.ApiAnalyticsRepository;
 import jakarta.annotation.PostConstruct;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
-
+import java.time.LocalDateTime;
+import java.util.*;
 import java.sql.SQLException;
-import java.util.LinkedHashMap;
-import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -24,33 +23,65 @@ public class ApiAnalyticsService {
     private final Map<String, AtomicLong> errors   = new ConcurrentHashMap<>();
     private final Map<String, AtomicLong> duration = new ConcurrentHashMap<>();
 
-    // last saved
     private final Map<String, Long> lastSavedHits     = new ConcurrentHashMap<>();
     private final Map<String, Long> lastSavedErrors   = new ConcurrentHashMap<>();
     private final Map<String, Long> lastSavedDuration = new ConcurrentHashMap<>();
 
-    // ─── recognize which API a URL belongs to ───────────────────
+    private static final int TIMELINE_WINDOW_MINUTES = 10;
+    private static final int BUCKET_SECONDS = 30;
+    private static final int RETENTION_MINUTES = 15;
+
     public String resolveApiName(String uri) {
         String[] parts = uri.split("/");
         String base = parts.length > 1 ? parts[1] : "";
         return switch (base) {
-            case "items"  -> "Item API";
-            case "orders" -> "Order API";
-            case "users"  -> "User API";
-            case "videos" -> "Video API";
-            case "auth"   -> "Auth API";
-            default       -> null;
+            case "items"      -> "Item API";
+            case "orders"     -> "Order API";
+            case "users"      -> "User API";
+            case "videos"     -> "Video API";
+            case "auth"       -> "Auth API";
+            case "analytics"  -> "Analytics API";
+            default           -> null;
         };
     }
 
-    // ─── called on every request ────────────────────────────────
     public void record(String apiName, long durationMs, boolean isError) {
+        System.out.println("Record API: " + apiName);
         hits.computeIfAbsent(apiName, k -> new AtomicLong()).incrementAndGet();
         duration.computeIfAbsent(apiName, k -> new AtomicLong()).addAndGet(durationMs);
         if (isError) errors.computeIfAbsent(apiName, k -> new AtomicLong()).incrementAndGet();
+
+        try {
+            repository.logCall(apiName, LocalDateTime.now());
+        } catch (SQLException e) {
+            System.out.println("Failed to log call for " + apiName);
+            e.printStackTrace();
+        }
     }
 
-    // ─── load saved counts when the app starts ──────────────────
+    // ─── used by the dashboard chart ─────────────────────────────
+    public Map<String, Object> getTimeline() {
+        LocalDateTime windowStart = LocalDateTime.now().minusMinutes(TIMELINE_WINDOW_MINUTES);
+        try {
+            List<Map<String, Object>> buckets = repository.getTimeline(windowStart, BUCKET_SECONDS);
+            return Map.of("windowStart", windowStart.toString(), "buckets", buckets);
+        } catch (SQLException e) {
+            System.out.println("Failed to load timeline");
+            e.printStackTrace();
+            return Map.of("windowStart", windowStart.toString(), "buckets", List.of());
+        }
+    }
+
+    @Scheduled(fixedDelay = 300000) // every 5 minutes
+    public void purgeOldCallLogs() {
+        try {
+            repository.deleteOlderThan(LocalDateTime.now().minusMinutes(RETENTION_MINUTES));
+        } catch (SQLException e) {
+            System.out.println("Failed to purge old call logs");
+            e.printStackTrace();
+        }
+    }
+
     @PostConstruct
     public void loadFromDb() {
         Map<String, long[]> saved = repository.findAll();
@@ -70,7 +101,6 @@ public class ApiAnalyticsService {
         System.out.println("Loaded saved API analytics from DB");
     }
 
-    // save after 30 sec
     @Scheduled(fixedDelay = 30000)
     public void flushToDb() {
         for (String apiName : hits.keySet()) {
@@ -86,14 +116,14 @@ public class ApiAnalyticsService {
             long deltaErr  = currentErr  - prevErr;
             long deltaDur  = currentDur  - prevDur;
 
-            if (deltaHits == 0) continue; // nothing new, skip
+            if (deltaHits == 0) continue;
 
             try {
                 repository.addToCounts(apiName, deltaHits, deltaErr, deltaDur);
 
-//                lastSavedHits.put(apiName, currentHits);
-//                lastSavedErrors.put(apiName, currentErr);
-//                lastSavedDuration.put(apiName, currentDur);
+                lastSavedHits.put(apiName, currentHits);
+                lastSavedErrors.put(apiName, currentErr);
+                lastSavedDuration.put(apiName, currentDur);
 
             } catch (SQLException e) {
                 System.out.println("Failed to save analytics for " + apiName);
@@ -102,7 +132,6 @@ public class ApiAnalyticsService {
         }
     }
 
-    // ─── used by the dashboard ───────────────────────────────────
     public Map<String, Long> getHits() {
         Map<String, Long> snapshot = new LinkedHashMap<>();
         hits.forEach((k, v) -> snapshot.put(k, v.get()));

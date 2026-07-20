@@ -67,6 +67,16 @@ public class SecurityConfig {
                         .requestMatchers("/", "/index.html", "/in.css", "/App.js",
                                 "/login.html", "/login.css", "/login.js").permitAll()
 
+
+                        // ── SUBSCRIPTIONS ──
+                        .requestMatchers("/favicon.ico").permitAll()
+                        .requestMatchers(HttpMethod.GET,  "/subscriptions/plans").hasAnyRole("CUSTOMER", "STAFF", "ADMIN", "SUPER_ADMIN")
+                        .requestMatchers(HttpMethod.GET,  "/subscriptions/my").hasRole("CUSTOMER")
+                        .requestMatchers(HttpMethod.POST, "/subscriptions/subscribe/**").hasRole("CUSTOMER")
+                        .requestMatchers(HttpMethod.POST, "/subscriptions/verify/**").hasRole("CUSTOMER")
+                        .requestMatchers(HttpMethod.POST, "/subscriptions/cancel").hasRole("CUSTOMER")
+                        .requestMatchers(HttpMethod.GET,  "/subscriptions").hasAnyRole("ADMIN", "SUPER_ADMIN")
+
                         .requestMatchers(HttpMethod.GET, "/items/search/**").hasAnyRole("CUSTOMER", "STAFF", "ADMIN", "SUPER_ADMIN")
 
                         // ── ITEMS ──
@@ -76,6 +86,9 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.DELETE, "/items/**").hasAnyRole("STAFF", "ADMIN", "SUPER_ADMIN")
 
                         // ── ORDERS ──
+                        .requestMatchers(HttpMethod.POST,   "/orders/*/pay").hasRole("CUSTOMER")
+                        .requestMatchers(HttpMethod.POST,   "/orders/*/verify").hasRole("CUSTOMER")
+                        .requestMatchers(HttpMethod.POST, "/orders/*/cancel-payment").hasRole("CUSTOMER")
                         .requestMatchers(HttpMethod.GET,    "/orders/**").hasAnyRole("CUSTOMER", "STAFF", "ADMIN", "SUPER_ADMIN")
                         .requestMatchers(HttpMethod.POST,   "/orders/**").hasAnyRole("CUSTOMER", "STAFF", "ADMIN", "SUPER_ADMIN")
                         .requestMatchers(HttpMethod.DELETE, "/orders/**").hasAnyRole("ADMIN", "SUPER_ADMIN")
@@ -86,6 +99,7 @@ public class SecurityConfig {
                         .requestMatchers("/videos/thumbnail/**").permitAll()
                         .requestMatchers("/videos/stream/**").permitAll()
                         .requestMatchers("/videos/**").hasRole("SUPER_ADMIN")
+                        .requestMatchers("/analytics/stream").permitAll()
                         .requestMatchers("/analytics/**").hasRole("SUPER_ADMIN")
                         // ── anything else needs login ──
                         .anyRequest().authenticated()

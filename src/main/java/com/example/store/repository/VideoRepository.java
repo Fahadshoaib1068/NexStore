@@ -16,7 +16,6 @@ public class VideoRepository {
         String sql = "INSERT INTO video_upload (original_name, file_path, uploaded_by) VALUES (?, ?, ?)";
         Integer generatedId = null;
 
-        // 1. Write to MASTER
         try (Connection conn = DBConnection.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
 
@@ -27,40 +26,11 @@ public class VideoRepository {
 
             ResultSet keys = ps.getGeneratedKeys();
             if (keys.next()) generatedId = keys.getInt(1);
-            System.out.println("Video saved to master with id: " + generatedId);
+            System.out.println("Video saved with id: " + generatedId);
 
         } catch (SQLException e) {
             e.printStackTrace();
             return null;
-        }
-
-        // 2. Sync to REPLICA — key fix: use same connection for IDENTITY_INSERT
-        if (generatedId != null) {
-            try (Connection replicaConn = DBConnection.getReplicaConnection()) {
-
-                // Must use same connection for all 3 statements
-                replicaConn.createStatement()
-                        .execute("SET IDENTITY_INSERT video_upload ON");
-
-                try (PreparedStatement ps = replicaConn.prepareStatement(
-                        "INSERT INTO video_upload (video_id, original_name, file_path, uploaded_by) VALUES (?, ?, ?, ?)")) {
-
-                    ps.setInt(1,    generatedId);
-                    ps.setString(2, originalName);
-                    ps.setString(3, filePath);
-                    ps.setString(4, uploadedBy);
-                    ps.executeUpdate();
-                }
-
-                replicaConn.createStatement()
-                        .execute("SET IDENTITY_INSERT video_upload OFF");
-
-                System.out.println(" Video synced to replica with id: " + generatedId);
-
-            } catch (SQLException e) {
-                System.out.println(" Failed to sync video to replica: " + e.getMessage());
-                e.printStackTrace();
-            }
         }
 
         return generatedId;
@@ -80,7 +50,7 @@ public class VideoRepository {
 
     private List<VideoUpload> queryList(String sql) {
         List<VideoUpload> list = new ArrayList<>();
-        try (Connection conn = DBConnection.getReplicaConnection();
+        try (Connection conn = DBConnection.getConnection();
              Statement stmt = conn.createStatement();
              ResultSet rs = stmt.executeQuery(sql)) {
             while (rs.next()) list.add(mapUpload(rs));
@@ -104,11 +74,12 @@ public class VideoRepository {
     }
 
     public void updateStatus(Integer videoId, String status) {
-        try {
-            DBConnection.executeOnBoth(
-                    "UPDATE video_upload SET status = ? WHERE video_id = ?",
-                    ps -> { ps.setString(1, status); ps.setInt(2, videoId); }
-            );
+        String sql = "UPDATE video_upload SET status = ? WHERE video_id = ?";
+        try (Connection conn = DBConnection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, status);
+            ps.setInt(2, videoId);
+            ps.executeUpdate();
             System.out.println("Video #" + videoId + " status -> " + status);
         } catch (SQLException e) {
             e.printStackTrace();
@@ -116,11 +87,13 @@ public class VideoRepository {
     }
 
     public void saveProcessed(Integer videoId, String quality, String filePath) {
-        try {
-            DBConnection.executeOnBoth(
-                    "INSERT INTO video_processed (video_id, quality, file_path) VALUES (?, ?, ?)",
-                    ps -> { ps.setInt(1, videoId); ps.setString(2, quality); ps.setString(3, filePath); }
-            );
+        String sql = "INSERT INTO video_processed (video_id, quality, file_path) VALUES (?, ?, ?)";
+        try (Connection conn = DBConnection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setInt(1, videoId);
+            ps.setString(2, quality);
+            ps.setString(3, filePath);
+            ps.executeUpdate();
             System.out.println("Saved processed video: " + quality + " for video #" + videoId);
         } catch (SQLException e) {
             e.printStackTrace();
@@ -130,7 +103,7 @@ public class VideoRepository {
     public List<VideoProcessed> findProcessedByVideoId(Integer videoId) {
         List<VideoProcessed> list = new ArrayList<>();
         String sql = "SELECT * FROM video_processed WHERE video_id = ? ORDER BY quality";
-        try (Connection conn = DBConnection.getReplicaConnection();
+        try (Connection conn = DBConnection.getConnection();
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setInt(1, videoId);
             ResultSet rs = ps.executeQuery();
@@ -147,15 +120,7 @@ public class VideoRepository {
              PreparedStatement ps = conn.prepareStatement(sql)) {
             ps.setInt(1, videoId);
             int rows = ps.executeUpdate();
-            if (rows > 0) {
-                try (Connection replicaConn = DBConnection.getReplicaConnection();
-                     PreparedStatement replicaPs = replicaConn.prepareStatement(sql)) {
-                    replicaPs.setInt(1, videoId);
-                    replicaPs.executeUpdate();
-                }
-                return true;
-            }
-            return false;
+            return rows > 0;
         } catch (SQLException e) {
             e.printStackTrace();
             return false;
@@ -178,11 +143,12 @@ public class VideoRepository {
     }
 
     public void updateThumbnail(Integer videoId, String thumbnailPath) {
-        try {
-            DBConnection.executeOnBoth(
-                    "UPDATE video_upload SET thumbnail_path = ? WHERE video_id = ?",
-                    ps -> { ps.setString(1, thumbnailPath); ps.setInt(2, videoId); }
-            );
+        String sql = "UPDATE video_upload SET thumbnail_path = ? WHERE video_id = ?";
+        try (Connection conn = DBConnection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, thumbnailPath);
+            ps.setInt(2, videoId);
+            ps.executeUpdate();
             System.out.println("Thumbnail updated for video #" + videoId);
         } catch (Exception e) {
             e.printStackTrace();

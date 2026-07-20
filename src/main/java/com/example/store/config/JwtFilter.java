@@ -13,7 +13,6 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import com.example.store.service.CustomUserDetailsService;
 import util.JwtUtil;
 
-
 import java.io.IOException;
 
 @Component
@@ -27,7 +26,6 @@ public class JwtFilter extends OncePerRequestFilter {
         this.userDetailsService = userDetailsService;
     }
 
-
     @Override
     protected void doFilterInternal(HttpServletRequest request,
                                     HttpServletResponse response,
@@ -35,29 +33,28 @@ public class JwtFilter extends OncePerRequestFilter {
             throws ServletException, IOException {
 
         System.out.println("Jwt filter triggered for: " + request.getMethod() + " " + request.getRequestURI());
-        // 1. Get Authorization header
+
         String authHeader = request.getHeader("Authorization");
-
-
         String token = null;
         String username = null;
 
-        // 2. Check if header starts with "Bearer: key that allows access to the API "
         if (authHeader != null && authHeader.startsWith("Bearer ")) {
-            token    = authHeader.substring(7);
-            username = jwtUtil.extractUsername(token);
-
-            System.out.println("Token found");
-        } else{
+            token = authHeader.substring(7);
+            System.out.println("Token found in header");
+        }
+         else {
             System.out.println("No token found");
         }
 
-        // 3. If username found and no authentication set yet
+        if (token != null) {
+            username = jwtUtil.extractUsername(token);
+        }
+
         if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
 
             UserDetails userDetails = userDetailsService.loadUserByUsername(username);
-            System.out.println("User loaded: " + userDetails.getUsername() + " , Autherities: " + userDetails.getAuthorities());
-            // 4. Validate token
+            System.out.println("User loaded: " + userDetails.getUsername() + " , Authorities: " + userDetails.getAuthorities());
+
             if (jwtUtil.validateToken(token)) {
                 UsernamePasswordAuthenticationToken authToken =
                         new UsernamePasswordAuthenticationToken(
@@ -70,7 +67,6 @@ public class JwtFilter extends OncePerRequestFilter {
                         new WebAuthenticationDetailsSource().buildDetails(request)
                 );
 
-                // 5. Set authentication in context
                 SecurityContextHolder.getContext().setAuthentication(authToken);
                 System.out.println("Authentication set for user: " + username);
             }
